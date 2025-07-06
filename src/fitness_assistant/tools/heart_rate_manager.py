@@ -1,17 +1,17 @@
-
-# src/fitness_assistant/tools/heart_rate_manager.py (completando)
+# src/fitness_assistant/tools/heart_rate_manager.py
 """
-Gerenciador de frequência cardíaca - versão completa
+Gerenciador de frequência cardíaca
 """
-from typing import Dict, Any, List, Optional
-from datetime import datetime, timedelta
+from typing import Dict, Any, Optional
+from datetime import datetime
 import logging
 
-from ..database.repositories import user_repo
+from ..database.repositories.user_repo import user_repo
 from ..utils.calculations import calculate_heart_rate_zones, determine_heart_rate_zone
 from ..utils.safety import check_heart_rate_safety
 
 logger = logging.getLogger(__name__)
+
 
 class HeartRateManager:
     """Gerencia análises de frequência cardíaca"""
@@ -22,7 +22,7 @@ class HeartRateManager:
         try:
             zones_data = calculate_heart_rate_zones(age, resting_hr, method="karvonen")
             
-            # Adiciona informações extras
+            # Adiciona informações extras para cada zona
             for zone_id, zone_info in zones_data["zones"].items():
                 zone_info["recommended_duration"] = self._get_zone_duration(zone_id)
                 zone_info["example_activities"] = self._get_zone_activities(zone_id)
@@ -64,12 +64,17 @@ class HeartRateManager:
                 }
             
             # Calcula zonas
-            resting_hr = user.resting_heart_rate or self._estimate_resting_hr(user.age, user.fitness_level)
+            resting_hr = user.resting_heart_rate or self._estimate_resting_hr(user.age, user.fitness_level.value)
             zones_data = calculate_heart_rate_zones(user.age, resting_hr)
             current_zone = determine_heart_rate_zone(current_hr, zones_data["zones"])
             
             # Verifica segurança
-            safety_check = check_heart_rate_safety(current_hr, user.age, user.fitness_level)
+            safety_check = check_heart_rate_safety(
+                current_hr, 
+                user.age, 
+                user.fitness_level.value,
+                user.health_conditions
+            )
             
             # Análise contextual
             context_analysis = self._analyze_context(current_hr, context, zones_data, user)
@@ -100,56 +105,8 @@ class HeartRateManager:
                 "message": f"Erro interno: {str(e)}"
             }
     
-    async def get_heart_rate_trends(
-        self,
-        user_id: str,
-        period_days: int = 30
-    ) -> Dict[str, Any]:
-        """Analisa tendências de FC ao longo do tempo"""
-        
-        try:
-            # Busca dados históricos (implementação futura com banco)
-            # Por agora, retorna análise simulada
-            
-            trends = {
-                "status": "success",
-                "user_id": user_id,
-                "period_days": period_days,
-                "trends": {
-                    "resting_hr_trend": "stable",  # improving, stable, declining
-                    "max_hr_trend": "stable",
-                    "recovery_trend": "improving",
-                    "zone_distribution": {
-                        "zona_1": 20,  # % tempo em cada zona
-                        "zona_2": 40,
-                        "zona_3": 25,
-                        "zona_4": 10,
-                        "zona_5": 5
-                    }
-                },
-                "insights": [
-                    "FC de repouso mantida estável",
-                    "Boa distribuição entre zonas aeróbicas",
-                    "Recuperação pós-exercício melhorando"
-                ],
-                "recommendations": [
-                    "Continue o bom trabalho nas zonas 2-3",
-                    "Considere incluir mais treinos na zona 1 para recuperação"
-                ]
-            }
-            
-            return trends
-            
-        except Exception as e:
-            logger.error(f"Erro ao analisar tendências FC para {user_id}: {e}")
-            return {
-                "status": "error",
-                "message": f"Erro interno: {str(e)}"
-            }
-    
     def _get_zone_duration(self, zone_id: str) -> str:
         """Retorna duração recomendada por zona"""
-        
         durations = {
             "zona_1": "20-60 minutos",
             "zona_2": "20-90 minutos", 
@@ -157,12 +114,10 @@ class HeartRateManager:
             "zona_4": "8-40 minutos",
             "zona_5": "30 segundos - 8 minutos"
         }
-        
         return durations.get(zone_id, "10-30 minutos")
     
-    def _get_zone_activities(self, zone_id: str) -> List[str]:
+    def _get_zone_activities(self, zone_id: str) -> list:
         """Retorna atividades típicas por zona"""
-        
         activities = {
             "zona_1": ["Caminhada leve", "Yoga suave", "Alongamento ativo"],
             "zona_2": ["Caminhada rápida", "Ciclismo leve", "Natação tranquila"],
@@ -170,12 +125,10 @@ class HeartRateManager:
             "zona_4": ["Corrida intensa", "Ciclismo forte", "Treino intervalado"],
             "zona_5": ["Sprints", "HIIT", "Treino de potência"]
         }
-        
         return activities.get(zone_id, ["Atividade moderada"])
     
     def _get_zone_focus(self, zone_id: str) -> str:
         """Retorna foco de treinamento por zona"""
-        
         focus = {
             "zona_1": "Recuperação ativa e mobilização de gordura",
             "zona_2": "Base aeróbica e resistência fundamental",
@@ -183,12 +136,10 @@ class HeartRateManager:
             "zona_4": "Limiar anaeróbico e capacidade lactária",
             "zona_5": "Potência máxima e sistema neuromuscular"
         }
-        
         return focus.get(zone_id, "Condicionamento geral")
     
-    def _get_general_hr_recommendations(self, age: int, resting_hr: int) -> List[str]:
+    def _get_general_hr_recommendations(self, age: int, resting_hr: int) -> list:
         """Gera recomendações gerais baseadas em FC"""
-        
         recommendations = []
         
         # Análise FC repouso
@@ -215,8 +166,7 @@ class HeartRateManager:
         return recommendations
     
     def _estimate_resting_hr(self, age: int, fitness_level: str) -> int:
-        """Estima FC de repouso"""
-        
+        """Estima FC de repouso baseada no perfil"""
         base_values = {
             "beginner": 75,
             "intermediate": 65,
@@ -235,113 +185,100 @@ class HeartRateManager:
         
         return base
     
-    def _analyze_context(self, current_hr: int, context: str, zones_data: Dict, user) -> Dict[str, Any]:
-        """Analisa FC no contexto atual"""
-        
+    def _analyze_context(self, current_hr: int, context: str, zones_data: dict, user) -> dict:
+        """Analisa FC no contexto da atividade"""
         max_hr = zones_data["max_hr"]
-        percentage = (current_hr / max_hr) * 100
+        hr_percentage = (current_hr / max_hr) * 100
         
-        analysis = {
-            "hr_percentage_of_max": round(percentage, 1),
-            "context_appropriate": True,
-            "context_feedback": ""
+        context_analysis = {
+            "hr_percentage_of_max": round(hr_percentage, 1),
+            "context": context,
+            "interpretation": ""
         }
         
         if context == "rest":
-            if current_hr > 100:
-                analysis["context_appropriate"] = False
-                analysis["context_feedback"] = "FC elevada para repouso - considere relaxar"
+            if current_hr > user.resting_heart_rate + 20:
+                context_analysis["interpretation"] = "FC elevada para repouso - pode indicar stress ou fadiga"
             else:
-                analysis["context_feedback"] = "FC adequada para repouso"
-                
-        elif context == "warmup":
-            if percentage < 50:
-                analysis["context_feedback"] = "Bom aquecimento gradual"
-            elif percentage > 70:
-                analysis["context_feedback"] = "Aquecimento muito intenso - reduza ritmo"
-            else:
-                analysis["context_feedback"] = "Aquecimento adequado"
+                context_analysis["interpretation"] = "FC normal para repouso"
                 
         elif context == "exercise":
-            if percentage < 60:
-                analysis["context_feedback"] = "Intensidade leve - pode aumentar se desejar"
-            elif percentage < 85:
-                analysis["context_feedback"] = "Intensidade adequada para exercício"
+            if hr_percentage < 60:
+                context_analysis["interpretation"] = "Intensidade baixa - pode aumentar se confortável"
+            elif hr_percentage < 80:
+                context_analysis["interpretation"] = "Intensidade moderada - zona de treino efetiva"
+            elif hr_percentage < 90:
+                context_analysis["interpretation"] = "Intensidade alta - monitorar de perto"
             else:
-                analysis["context_feedback"] = "Alta intensidade - monitore cuidadosamente"
+                context_analysis["interpretation"] = "Intensidade muito alta - reduzir se necessário"
                 
         elif context == "recovery":
-            if percentage > 70:
-                analysis["context_appropriate"] = False
-                analysis["context_feedback"] = "FC ainda alta - continue recuperação ativa"
+            if hr_percentage > 70:
+                context_analysis["interpretation"] = "FC ainda elevada - continue recuperação ativa"
             else:
-                analysis["context_feedback"] = "Boa recuperação pós-exercício"
+                context_analysis["interpretation"] = "FC adequada para recuperação"
         
-        return analysis
+        return context_analysis
     
     def _get_dynamic_recommendations(
-        self,
-        current_hr: int,
-        current_zone: Dict,
-        context: str,
-        user,
-        safety_check: Dict
-    ) -> List[str]:
-        """Gera recomendações dinâmicas baseadas no estado atual"""
+        self, 
+        current_hr: int, 
+        current_zone: dict, 
+        context: str, 
+        user, 
+        safety_check: dict
+    ) -> list:
+        """Gera recomendações dinâmicas baseadas na situação atual"""
         
         recommendations = []
         
-        # Recomendações de segurança prioritárias
-        if not safety_check["safe"]:
-            recommendations.extend(safety_check.get("alerts", []))
-            return recommendations
+        # Recomendações de segurança primeiro
+        if safety_check.get("alerts"):
+            recommendations.extend(safety_check["alerts"])
         
-        zone_name = current_zone.get("zone_name", "").lower()
-        
-        # Recomendações por zona atual
-        if "recuperação" in zone_name:
-            recommendations.extend([
-                "Ótima zona para exercícios prolongados",
-                "Ideal para queima de gordura",
-                "Mantenha respiração confortável"
-            ])
-        elif "aeróbica" in zone_name:
-            recommendations.extend([
-                "Zona excelente para resistência",
-                "Mantenha este ritmo por 20-40 minutos",
-                "Hidrate-se regularmente"
-            ])
-        elif "limiar" in zone_name or "potência" in zone_name:
-            recommendations.extend([
-                "Alta intensidade - monitore cuidadosamente",
-                "Limite tempo nesta zona (5-15 min)",
-                "Prepare recuperação ativa depois"
-            ])
-        
-        # Recomendações por contexto
+        # Recomendações contextuais
         if context == "exercise":
-            recommendations.append("Ajuste intensidade conforme seu objetivo")
-        elif context == "recovery":
-            recommendations.append("Continue movimentação leve até FC normalizar")
+            zone_id = current_zone.get("zone_id", "unknown")
+            
+            if zone_id == "zona_1":
+                recommendations.append("Pode aumentar a intensidade gradualmente")
+            elif zone_id == "zona_2":
+                recommendations.append("Ótima zona para queima de gordura e base aeróbica")
+            elif zone_id == "zona_3":
+                recommendations.append("Zona ideal para melhoria cardiovascular")
+            elif zone_id == "zona_4":
+                recommendations.append("Intensidade alta - monitore duração")
+            elif zone_id == "zona_5":
+                recommendations.append("Intensidade máxima - sessões curtas apenas")
         
-        # Recomendações personalizadas
-        if user.fitness_level == "beginner":
-            recommendations.append("Como iniciante, priorize consistência sobre intensidade")
-        elif user.fitness_level == "advanced":
-            recommendations.append("Pode explorar zonas mais altas com segurança")
+        # Recomendações baseadas no perfil
+        if user.fitness_level.value == "beginner":
+            recommendations.append("Como iniciante, foque em zonas 1-2 principalmente")
+        elif user.fitness_level.value == "advanced":
+            recommendations.append("Pode explorar todas as zonas com segurança")
+        
+        # Recomendações por condições de saúde
+        for condition in user.health_conditions:
+            if condition.value == "heart_disease":
+                recommendations.append("Mantenha FC abaixo de 70% da máxima")
+            elif condition.value == "hypertension":
+                recommendations.append("Evite picos súbitos de FC")
         
         return recommendations
     
-    def _suggest_next_check(self, context: str, current_zone: Dict) -> str:
-        """Sugere quando verificar FC novamente"""
+    def _suggest_next_check(self, context: str, current_zone: dict) -> str:
+        """Sugere quando fazer próxima verificação"""
+        
+        zone_id = current_zone.get("zone_id", "unknown")
         
         if context == "exercise":
-            zone_name = current_zone.get("zone_name", "").lower()
-            if "potência" in zone_name or "limiar" in zone_name:
+            if zone_id in ["zona_4", "zona_5"]:
                 return "Verifique em 2-3 minutos"
-            else:
+            elif zone_id == "zona_3":
                 return "Verifique em 5-10 minutos"
+            else:
+                return "Verifique em 10-15 minutos"
         elif context == "recovery":
-            return "Verifique em 2-3 minutos até normalizar"
+            return "Verifique em 2-5 minutos"
         else:
             return "Verifique conforme necessário"

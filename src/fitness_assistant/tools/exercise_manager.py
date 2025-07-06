@@ -6,11 +6,13 @@ from typing import Dict, Any, List, Optional
 import logging
 from datetime import datetime
 
-from ..database.repositories import exercise_repo, user_repo
+from ..database.repositories.user_repo import user_repo
+from ..database.repositories.exercise_repo import exercise_repo
 from ..utils.calculations import calculate_heart_rate_zones, determine_heart_rate_zone
 from ..utils.safety import check_heart_rate_safety
 
 logger = logging.getLogger(__name__)
+
 
 class ExerciseManager:
     """Gerencia exercícios e recomendações"""
@@ -35,78 +37,45 @@ class ExerciseManager:
                 }
             
             # Verifica segurança da FC
-            safety_check = check_heart_rate_safety(current_hr, user.age, user.fitness_level)
+            safety_check = check_heart_rate_safety(
+                current_hr, 
+                user.age, 
+                user.fitness_level.value,
+                user.health_conditions
+            )
+            
             if not safety_check["safe"]:
                 return {
                     "status": "warning",
                     "message": "FC fora da zona segura",
                     "safety_alerts": safety_check["alerts"],
-                    "recommendations": ["Reduza a intensidade", "Consulte um profissional"]
+                    "recommendations": ["Reduza a intensidade", "Descanse antes de continuar"]
                 }
             
             # Calcula zonas de FC
-            resting_hr = user.resting_heart_rate or self._estimate_resting_hr(user.age, user.fitness_level)
+            resting_hr = user.resting_heart_rate or self._estimate_resting_hr(user.age, user.fitness_level.value)
             hr_zones = calculate_heart_rate_zones(user.age, resting_hr)
             current_zone = determine_heart_rate_zone(current_hr, hr_zones["zones"])
             
-            # Busca exercícios por tipo
-            if workout_type == "mixed":
-                exercise_types = ["cardio", "strength"]
-            else:
-                exercise_types = [workout_type]
+            # Filtra exercícios por equipamentos disponíveis
+            if available_equipment is None:
+                available_equipment = ["none"]
             
-            recommendations = []
-            remaining_duration = session_duration
-            
-            for ex_type in exercise_types:
-                exercises = await exercise_repo.get_exercises_by_type(ex_type)
-                
-                if exercises:
-                    # Filtra por nível e equipamento
-                    suitable_exercises = self._filter_exercises(
-                        exercises, 
-                        user.fitness_level, 
-                        available_equipment or ["none"],
-                        user.health_conditions
-                    )
-                    
-                    if suitable_exercises:
-                        duration_for_type = remaining_duration // len(exercise_types)
-                        exercise = self._select_best_exercise(suitable_exercises, current_zone, user)
-                        
-                        recommendation = {
-                            "exercise": {
-                                "name": exercise.name,
-                                "type": exercise.type,
-                                "description": exercise.description,
-                                "instructions": exercise.instructions
-                            },
-                            "duration_minutes": min(duration_for_type, exercise.duration_max),
-                            "target_zone": current_zone,
-                            "intensity_guidance": self._get_intensity_guidance(current_zone, user.fitness_level),
-                            "safety_notes": exercise.safety_notes,
-                            "modifications": self._get_personalized_modifications(exercise, user)
-                        }
-                        
-                        recommendations.append(recommendation)
-                        remaining_duration -= duration_for_type
-            
-            # Adiciona aquecimento e alongamento
-            warm_up, cool_down = self._get_warm_up_cool_down(user.fitness_level, session_duration)
+            # Busca exercícios adequados
+            recommendations = await self._generate_exercise_recommendations(
+                user, current_zone, session_duration, workout_type, available_equipment
+            )
             
             return {
                 "status": "success",
                 "user_id": user_id,
                 "current_hr": current_hr,
-                "current_zone": current_zone,
-                "session_plan": {
-                    "warm_up": warm_up,
-                    "main_exercises": recommendations,
-                    "cool_down": cool_down,
-                    "total_duration": session_duration
-                },
-                "safety_notes": safety_check.get("warnings", []),
-                "hydration_reminder": "Mantenha-se hidratado durante o exercício"
+                "current_zone": current_zone.get("zone_name", "Unknown"),
+                "session_duration": session_duration,
+                "workout_type": workout_type,
+                "recommendations": recommendations,
+                "safety_notes": self._get_safety_notes(user, current_zone),
+                "generated_at": datetime.now().isoformat()
             }
             
         except Exception as e:
@@ -137,33 +106,31 @@ class ExerciseManager:
             base_exercise = exercises[0]
             variations = []
             
-            # Variações por nível
+            # Variações por nível de fitness
             if fitness_level == "beginner":
-                variations.extend([
-                    {
-                        "name": f"{base_exercise.name} - Versão Iniciante",
-                        "description": "Versão simplificada com menor intensidade",
-                        "modifications": [
-                            "Reduza amplitude de movimento",
-                            "Use menos peso ou resistência",
-                            "Faça mais pausas entre séries"
-                        ]
-                    }
-                ])
+                variations.append({
+                    "name": f"{base_exercise.name} - Versão Iniciante",
+                    "description": "Versão simplificada com menor intensidade",
+                    "modifications": [
+                        "Reduza amplitude de movimento",
+                        "Use menos peso ou resistência",
+                        "Faça mais pausas entre repetições",
+                        "Reduza número de repetições"
+                    ]
+                })
             elif fitness_level == "advanced":
-                variations.extend([
-                    {
-                        "name": f"{base_exercise.name} - Versão Avançada",
-                        "description": "Versão mais desafiadora",
-                        "modifications": [
-                            "Aumente amplitude de movimento",
-                            "Adicione peso ou resistência",
-                            "Combine com outros movimentos"
-                        ]
-                    }
-                ])
+                variations.append({
+                    "name": f"{base_exercise.name} - Versão Avançada",
+                    "description": "Versão mais desafiadora",
+                    "modifications": [
+                        "Aumente amplitude de movimento",
+                        "Adicione peso ou resistência",
+                        "Combine com outros movimentos",
+                        "Aumente tempo sob tensão"
+                    ]
+                })
             
-            # Modificações específicas
+            # Modificações específicas por necessidades
             if modifications_needed:
                 for modification in modifications_needed:
                     if "joelho" in modification.lower():
@@ -173,7 +140,8 @@ class ExerciseManager:
                             "modifications": [
                                 "Evite flexão profunda",
                                 "Use suporte se necessário",
-                                "Movimento controlado"
+                                "Movimento controlado e lento",
+                                "Fortaleça músculos ao redor do joelho"
                             ]
                         })
                     elif "lombar" in modification.lower():
@@ -183,7 +151,19 @@ class ExerciseManager:
                             "modifications": [
                                 "Mantenha coluna neutra",
                                 "Evite flexão excessiva",
-                                "Use apoio se necessário"
+                                "Use apoio lombar se necessário",
+                                "Fortaleça core antes de progredir"
+                            ]
+                        })
+                    elif "ombro" in modification.lower():
+                        variations.append({
+                            "name": f"{base_exercise.name} - Proteção Ombro",
+                            "description": "Adaptado para problemas no ombro",
+                            "modifications": [
+                                "Evite movimentos acima da cabeça",
+                                "Reduza amplitude se houver dor",
+                                "Fortaleça rotadores do ombro",
+                                "Use movimentos controlados"
                             ]
                         })
             
@@ -195,7 +175,8 @@ class ExerciseManager:
                 "general_tips": [
                     "Sempre aqueça antes de começar",
                     "Pare se sentir dor",
-                    "Progrida gradualmente"
+                    "Progrida gradualmente",
+                    "Mantenha boa forma durante todo o movimento"
                 ]
             }
             
@@ -210,219 +191,229 @@ class ExerciseManager:
         """Retorna catálogo completo de exercícios"""
         
         try:
-            # Implementação simplificada - em produção viria do banco
-            exercises_catalog = [
-                {
-                    "id": "walk_light",
-                    "name": "Caminhada Leve",
-                    "type": "cardio",
-                    "difficulty": "beginner",
-                    "equipment": ["none"],
-                    "duration_range": [10, 60],
-                    "muscle_groups": ["pernas", "core"]
-                },
-                {
-                    "id": "squat_bodyweight", 
-                    "name": "Agachamento Livre",
-                    "type": "strength",
-                    "difficulty": "beginner",
-                    "equipment": ["none"],
-                    "duration_range": [5, 20],
-                    "muscle_groups": ["quadriceps", "glúteos"]
-                },
-                {
-                    "id": "plank",
-                    "name": "Prancha",
-                    "type": "strength",
-                    "difficulty": "intermediate",
-                    "equipment": ["none"], 
-                    "duration_range": [1, 10],
-                    "muscle_groups": ["core", "ombros"]
-                },
-                {
-                    "id": "push_ups",
-                    "name": "Flexões",
-                    "type": "strength",
-                    "difficulty": "intermediate",
-                    "equipment": ["none"],
-                    "duration_range": [5, 15],
-                    "muscle_groups": ["peito", "tríceps", "ombros"]
-                }
-            ]
+            exercises = await exercise_repo.get_all_exercises()
             
-            return exercises_catalog
+            catalog = []
+            for exercise in exercises:
+                catalog.append({
+                    "id": exercise.id,
+                    "name": exercise.name,
+                    "type": exercise.type.value,
+                    "difficulty": exercise.difficulty_level.value,
+                    "equipment": [eq.value for eq in exercise.equipment_needed],
+                    "duration_range": exercise.duration_range,
+                    "muscle_groups": exercise.muscle_groups,
+                    "description": exercise.description
+                })
+            
+            return catalog
             
         except Exception as e:
-            logger.error(f"Erro ao buscar catálogo: {e}")
+            logger.error(f"Erro ao buscar catálogo de exercícios: {e}")
             return []
     
-    def _estimate_resting_hr(self, age: int, fitness_level: str) -> int:
-        """Estima FC de repouso baseada na idade e nível"""
+    async def _generate_exercise_recommendations(
+        self,
+        user,
+        current_zone: dict,
+        session_duration: int,
+        workout_type: str,
+        available_equipment: List[str]
+    ) -> List[Dict[str, Any]]:
+        """Gera recomendações de exercícios personalizadas"""
         
-        base_resting = {
+        recommendations = []
+        remaining_duration = session_duration
+        
+        # Determina tipos de exercício baseado no workout_type
+        if workout_type == "mixed":
+            exercise_types = ["cardio", "strength"]
+            cardio_ratio = 0.6  # 60% cardio, 40% força
+        elif workout_type == "cardio":
+            exercise_types = ["cardio"]
+            cardio_ratio = 1.0
+        elif workout_type == "strength":
+            exercise_types = ["strength"]
+            cardio_ratio = 0.0
+        else:
+            exercise_types = ["cardio", "strength"]
+            cardio_ratio = 0.5
+        
+        # Busca exercícios por tipo
+        for ex_type in exercise_types:
+            exercises = await exercise_repo.get_exercises_by_type(ex_type)
+            
+            # Filtra por equipamentos disponíveis
+            filtered_exercises = await exercise_repo.get_exercises_by_equipment(available_equipment)
+            
+            # Filtra por dificuldade apropriada
+            suitable_exercises = []
+            for exercise in filtered_exercises:
+                if exercise.type.value == ex_type:
+                    # Verifica se dificuldade é apropriada
+                    if self._is_suitable_difficulty(exercise, user.fitness_level.value):
+                        suitable_exercises.append(exercise)
+            
+            if suitable_exercises:
+                # Calcula duração para este tipo
+                if ex_type == "cardio":
+                    type_duration = int(remaining_duration * cardio_ratio) if workout_type == "mixed" else remaining_duration
+                else:
+                    type_duration = remaining_duration - int(session_duration * cardio_ratio) if workout_type == "mixed" else remaining_duration
+                
+                # Seleciona exercícios
+                selected_exercises = self._select_exercises(
+                    suitable_exercises, 
+                    type_duration, 
+                    user,
+                    current_zone
+                )
+                
+                recommendations.extend(selected_exercises)
+                remaining_duration -= sum(ex['recommended_duration'] for ex in selected_exercises)
+        
+        return recommendations
+    
+    def _is_suitable_difficulty(self, exercise, fitness_level: str) -> bool:
+        """Verifica se dificuldade do exercício é adequada"""
+        
+        exercise_difficulty = exercise.difficulty_level.value
+        
+        difficulty_mapping = {
+            "beginner": ["very_low", "low"],
+            "intermediate": ["low", "moderate"],
+            "advanced": ["moderate", "high", "very_high"]
+        }
+        
+        suitable_levels = difficulty_mapping.get(fitness_level, ["low", "moderate"])
+        return exercise_difficulty in suitable_levels
+    
+    def _select_exercises(
+        self, 
+        exercises: List, 
+        total_duration: int, 
+        user,
+        current_zone: dict
+    ) -> List[Dict[str, Any]]:
+        """Seleciona exercícios adequados para a sessão"""
+        
+        selected = []
+        used_duration = 0
+        
+        # Prioriza exercícios baseado nas preferências do usuário
+        user_preferences = [pref.value for pref in user.preferences] if user.preferences else []
+        
+        # Ordena exercícios por relevância
+        scored_exercises = []
+        for exercise in exercises:
+            score = 0
+            
+            # Pontuação por preferência
+            if exercise.type.value in user_preferences:
+                score += 10
+            
+            # Pontuação por grupo muscular (varia para balanceamento)
+            for muscle in exercise.muscle_groups:
+                if muscle in ["core", "legs"]:  # Grupos importantes
+                    score += 5
+            
+            scored_exercises.append((score, exercise))
+        
+        # Ordena por pontuação
+        scored_exercises.sort(key=lambda x: x[0], reverse=True)
+        
+        # Seleciona exercícios até preencher a duração
+        for score, exercise in scored_exercises:
+            if used_duration >= total_duration:
+                break
+            
+            # Calcula duração recomendada para este exercício
+            min_duration, max_duration = exercise.duration_range
+            
+            # Ajusta baseado no tempo restante e zona de FC
+            remaining_time = total_duration - used_duration
+            
+            if current_zone.get("intensity") == "alta":
+                recommended_duration = min(min_duration, remaining_time, 15)  # Máximo 15min em alta intensidade
+            else:
+                recommended_duration = min(max_duration, remaining_time, 30)  # Máximo 30min
+            
+            if recommended_duration >= min_duration:
+                selected.append({
+                    "exercise_id": exercise.id,
+                    "name": exercise.name,
+                    "type": exercise.type.value,
+                    "description": exercise.description,
+                    "recommended_duration": recommended_duration,
+                    "instructions": exercise.instructions,
+                    "muscle_groups": exercise.muscle_groups,
+                    "safety_notes": exercise.safety_notes,
+                    "estimated_calories": self._estimate_calories(exercise, recommended_duration, user)
+                })
+                
+                used_duration += recommended_duration
+        
+        return selected
+    
+    def _estimate_calories(self, exercise, duration: int, user) -> int:
+        """Estima calorias para um exercício"""
+        
+        fitness_level = user.fitness_level.value
+        calories_per_minute = exercise.calories_per_minute.get(fitness_level, 5.0)
+        
+        # Ajusta baseado no peso (estimativa grosseira)
+        weight_factor = user.weight / 70.0  # 70kg como base
+        
+        total_calories = int(calories_per_minute * duration * weight_factor)
+        return max(total_calories, duration)  # Mínimo 1 cal/min
+    
+    def _estimate_resting_hr(self, age: int, fitness_level: str) -> int:
+        """Estima FC de repouso"""
+        base_values = {
             "beginner": 75,
             "intermediate": 65,
             "advanced": 55
         }
         
-        base = base_resting.get(fitness_level, 70)
+        base = base_values.get(fitness_level, 70)
         
-        # Ajusta por idade
-        if age > 50:
+        # Ajuste por idade
+        if age > 60:
+            base += 8
+        elif age > 40:
             base += 5
         elif age < 25:
             base -= 5
         
         return base
     
-    def _filter_exercises(
-        self,
-        exercises: List,
-        fitness_level: str,
-        available_equipment: List[str],
-        health_conditions: List[str]
-    ) -> List:
-        """Filtra exercícios por critérios"""
+    def _get_safety_notes(self, user, current_zone: dict) -> List[str]:
+        """Gera notas de segurança personalizadas"""
         
-        suitable = []
+        safety_notes = [
+            "Monitore sua frequência cardíaca regularmente",
+            "Pare se sentir dor ou desconforto",
+            "Mantenha-se hidratado durante o exercício"
+        ]
         
-        for exercise in exercises:
-            # Verifica equipamento
-            exercise_equipment = getattr(exercise, 'equipment_needed', ['none'])
-            if not any(eq in available_equipment for eq in exercise_equipment):
-                continue
-            
-            # Verifica contraindicações
-            contraindications = getattr(exercise, 'contraindications', [])
-            if any(condition in contraindications for condition in health_conditions):
-                continue
-            
-            # Verifica nível de dificuldade
-            difficulty = getattr(exercise, 'difficulty_level', 'moderate')
-            if fitness_level == "beginner" and difficulty in ["high", "very_high"]:
-                continue
-            
-            suitable.append(exercise)
+        # Notas específicas por zona de FC
+        zone_id = current_zone.get("zone_id", "")
+        if zone_id in ["zona_4", "zona_5"]:
+            safety_notes.append("Intensidade alta - sessões mais curtas")
+            safety_notes.append("Tenha períodos de recuperação entre exercícios")
         
-        return suitable
-    
-    def _select_best_exercise(self, exercises: List, current_zone: Dict, user) -> Any:
-        """Seleciona melhor exercício baseado no contexto"""
-        
-        # Lógica simplificada - seleciona primeiro adequado
-        # Em produção, usaria algoritmo mais sofisticado
-        
-        # Prioriza exercícios que combinam com a zona atual
-        zone_name = current_zone.get("zone_name", "").lower()
-        
-        for exercise in exercises:
-            # Se está em zona aeróbica, prioriza cardio
-            if "aeróbica" in zone_name and exercise.type == "cardio":
-                return exercise
-            # Se está em zona baixa, prioriza força
-            elif "recuperação" in zone_name and exercise.type == "strength":
-                return exercise
-        
-        # Retorna primeiro disponível
-        return exercises[0] if exercises else None
-    
-    def _get_intensity_guidance(self, current_zone: Dict, fitness_level: str) -> List[str]:
-        """Gera orientações de intensidade"""
-        
-        guidance = []
-        zone_name = current_zone.get("zone_name", "").lower()
-        
-        if "recuperação" in zone_name:
-            guidance.extend([
-                "Mantenha ritmo leve e confortável",
-                "Você deve conseguir conversar normalmente",
-                "Foque na técnica dos movimentos"
-            ])
-        elif "aeróbica" in zone_name:
-            guidance.extend([
-                "Mantenha ritmo moderado e sustentável",
-                "Respiração ligeiramente acelerada",
-                "Deve conseguir falar frases curtas"
-            ])
-        elif "limiar" in zone_name or "potência" in zone_name:
-            guidance.extend([
-                "Intensidade alta, monitore FC",
-                "Períodos curtos nesta intensidade",
-                "Inclua intervalos de recuperação"
-            ])
-        
-        # Ajustes por nível fitness
-        if fitness_level == "beginner":
-            guidance.append("Comece devagar e aumente gradualmente")
-        elif fitness_level == "advanced":
-            guidance.append("Pode explorar intensidades mais altas")
-        
-        return guidance
-    
-    def _get_personalized_modifications(self, exercise, user) -> List[str]:
-        """Gera modificações personalizadas"""
-        
-        modifications = []
-        
-        # Baseado na idade
-        if user.age > 65:
-            modifications.extend([
-                "Movimento mais lento e controlado",
-                "Use apoio se necessário",
-                "Foque no equilíbrio"
-            ])
-        elif user.age < 25:
-            modifications.append("Pode explorar maior amplitude de movimento")
-        
-        # Baseado no nível fitness
-        if user.fitness_level == "beginner":
-            modifications.extend([
-                "Comece com menos repetições",
-                "Priorize forma sobre intensidade",
-                "Descanse mais entre séries"
-            ])
-        
-        # Baseado em condições de saúde
+        # Notas por condições de saúde
         for condition in user.health_conditions:
-            if condition == "diabetes":
-                modifications.append("Monitore glicemia se sessão longa")
-            elif condition == "hypertension":
-                modifications.append("Evite prender respiração")
-            elif condition == "arthritis":
-                modifications.append("Amplitude de movimento confortável")
+            if condition.value == "diabetes":
+                safety_notes.append("Monitore glicemia antes e após exercícios")
+            elif condition.value == "hypertension":
+                safety_notes.append("Evite exercícios isométricos prolongados")
+            elif condition.value == "heart_disease":
+                safety_notes.append("Mantenha FC abaixo dos limites recomendados pelo médico")
         
-        return modifications
-    
-    def _get_warm_up_cool_down(self, fitness_level: str, session_duration: int) -> tuple:
-        """Retorna aquecimento e alongamento apropriados"""
+        # Notas por idade
+        if user.age > 65:
+            safety_notes.append("Inclua exercícios de equilíbrio e coordenação")
+            safety_notes.append("Aqueça por mais tempo antes dos exercícios")
         
-        # Duração do aquecimento baseada na sessão
-        warm_up_duration = max(5, session_duration // 6)  # 5-10 min
-        cool_down_duration = max(5, session_duration // 8)  # 5-8 min
-        
-        warm_up = {
-            "duration_minutes": warm_up_duration,
-            "exercises": [
-                "Movimentação articular (2-3 min)",
-                "Caminhada leve (2-3 min)",
-                "Alongamento dinâmico (2-4 min)"
-            ],
-            "intensity": "Muito leve, gradual"
-        }
-        
-        cool_down = {
-            "duration_minutes": cool_down_duration,
-            "exercises": [
-                "Caminhada lenta (2-3 min)",
-                "Alongamento estático (3-5 min)",
-                "Respiração profunda (1-2 min)"
-            ],
-            "intensity": "Muito leve, relaxante"
-        }
-        
-        # Ajustes por nível
-        if fitness_level == "beginner":
-            warm_up["exercises"].append("Movimentos extras de mobilidade")
-            cool_down["exercises"].append("Alongamento prolongado")
-        
-        return warm_up, cool_down
+        return safety_notes

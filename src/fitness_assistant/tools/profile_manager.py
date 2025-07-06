@@ -1,6 +1,6 @@
-# src/fitness_assistant/tools/profile_manager.py (atualizado para PostgreSQL)
+# src/fitness_assistant/tools/profile_manager.py
 """
-Gerenciador de perfis com PostgreSQL
+Gerenciador de perfis de usuário
 """
 from typing import Dict, Any, Optional, List
 from datetime import datetime
@@ -8,13 +8,14 @@ import logging
 
 from ..database.repositories import user_repo
 from ..models.user import FitnessLevel, HealthCondition, ExercisePreference
-from ..utils.validators import validate_user_data
+from ..utils.validators import validate_user_data, ValidationError
 from ..utils.safety import generate_health_recommendations
 
 logger = logging.getLogger(__name__)
 
+
 class ProfileManager:
-    """Gerencia operações de perfil com PostgreSQL"""
+    """Gerencia operações de perfil de usuário"""
     
     async def create_profile(
         self,
@@ -28,10 +29,10 @@ class ProfileManager:
         resting_heart_rate: Optional[int] = None,
         goals: List[str] = None
     ) -> Dict[str, Any]:
-        """Cria novo perfil de usuário no PostgreSQL"""
+        """Cria novo perfil de usuário"""
         
         try:
-            # Validações
+            # Validações básicas
             validate_user_data(age, weight, height)
             
             # Verifica se usuário já existe
@@ -42,15 +43,37 @@ class ProfileManager:
                     "message": f"Usuário {user_id} já existe"
                 }
             
+            # Normaliza dados
+            health_conditions = health_conditions or []
+            preferences = preferences or []
+            goals = goals or []
+            
             # Valida enums
             try:
                 fitness_enum = FitnessLevel(fitness_level.lower())
-                health_enums = [HealthCondition(cond.lower()).value for cond in (health_conditions or [])]
-                pref_enums = [ExercisePreference(pref.lower()).value for pref in (preferences or [])]
+                
+                # Valida condições de saúde
+                valid_health_conditions = []
+                for condition in health_conditions:
+                    try:
+                        health_enum = HealthCondition(condition.lower())
+                        valid_health_conditions.append(health_enum)
+                    except ValueError:
+                        logger.warning(f"Condição de saúde inválida ignorada: {condition}")
+                
+                # Valida preferências
+                valid_preferences = []
+                for pref in preferences:
+                    try:
+                        pref_enum = ExercisePreference(pref.lower())
+                        valid_preferences.append(pref_enum)
+                    except ValueError:
+                        logger.warning(f"Preferência inválida ignorada: {pref}")
+                
             except ValueError as e:
                 return {
                     "status": "error",
-                    "message": f"Valor inválido: {str(e)}"
+                    "message": f"Nível de fitness inválido: {fitness_level}"
                 }
             
             # Dados para criação
@@ -59,42 +82,45 @@ class ProfileManager:
                 "age": age,
                 "weight": weight,
                 "height": height,
-                "fitness_level": fitness_enum.value,
-                "health_conditions": health_enums,
-                "preferences": pref_enums,
+                "fitness_level": fitness_enum,
+                "health_conditions": valid_health_conditions,
+                "preferences": valid_preferences,
                 "resting_heart_rate": resting_heart_rate,
-                "goals": goals or []
+                "goals": goals
             }
             
-            # Cria no banco
-            profile = await user_repo.create_user(user_data)
+            # Cria usuário
+            user = await user_repo.create_user(user_data)
             
-            # Gera recomendações
-            health_recs = generate_health_recommendations_from_data(user_data)
+            # Gera recomendações de saúde
+            health_recommendations = generate_health_recommendations(user)
             
             logger.info(f"Perfil criado para usuário {user_id}")
             
             return {
                 "status": "success",
-                "message": f"Perfil criado para {user_id}",
+                "message": "Perfil criado com sucesso",
                 "profile": {
-                    "user_id": profile.user_id,
-                    "age": profile.age,
-                    "weight": profile.weight,
-                    "height": profile.height,
-                    "fitness_level": profile.fitness_level,
-                    "health_conditions": profile.health_conditions,
-                    "preferences": profile.preferences,
-                    "resting_heart_rate": profile.resting_heart_rate,
-                    "goals": profile.goals,
-                    "created_at": profile.created_at.isoformat()
+                    "user_id": user.user_id,
+                    "age": user.age,
+                    "weight": user.weight,
+                    "height": user.height,
+                    "bmi": user.bmi,
+                    "bmi_category": user.bmi_category,
+                    "fitness_level": user.fitness_level.value,
+                    "health_conditions": [hc.value for hc in user.health_conditions],
+                    "preferences": [p.value for p in user.preferences],
+                    "goals": user.goals,
+                    "created_at": user.created_at.isoformat()
                 },
-                "bmi": profile.bmi,
-                "bmi_category": profile.bmi_category,
-                "health_recommendations": health_recs,
-                "completeness_score": self._calculate_completeness_from_db(profile)
+                "health_recommendations": health_recommendations
             }
             
+        except ValidationError as e:
+            return {
+                "status": "error",
+                "message": str(e)
+            }
         except Exception as e:
             logger.error(f"Erro ao criar perfil para {user_id}: {e}")
             return {
@@ -103,11 +129,12 @@ class ProfileManager:
             }
     
     async def get_profile(self, user_id: str) -> Dict[str, Any]:
-        """Recupera perfil do usuário do PostgreSQL"""
+        """Obtém perfil do usuário"""
         
         try:
-            profile = await user_repo.get_user_by_id(user_id)
-            if not profile:
+            user = await user_repo.get_user_by_id(user_id)
+            
+            if not user:
                 return {
                     "status": "error",
                     "message": f"Usuário {user_id} não encontrado"
@@ -116,72 +143,58 @@ class ProfileManager:
             return {
                 "status": "success",
                 "profile": {
-                    "user_id": profile.user_id,
-                    "age": profile.age,
-                    "weight": profile.weight,
-                    "height": profile.height,
-                    "fitness_level": profile.fitness_level,
-                    "health_conditions": profile.health_conditions,
-                    "preferences": profile.preferences,
-                    "resting_heart_rate": profile.resting_heart_rate,
-                    "goals": profile.goals,
-                    "created_at": profile.created_at.isoformat(),
-                    "updated_at": profile.updated_at.isoformat()
-                },
-                "bmi": profile.bmi,
-                "bmi_category": profile.bmi_category,
-                "completeness_score": self._calculate_completeness_from_db(profile),
-                "recommendations": self._get_profile_suggestions_from_db(profile)
+                    "user_id": user.user_id,
+                    "age": user.age,
+                    "weight": user.weight,
+                    "height": user.height,
+                    "bmi": user.bmi,
+                    "bmi_category": user.bmi_category,
+                    "fitness_level": user.fitness_level.value,
+                    "health_conditions": [hc.value for hc in user.health_conditions],
+                    "preferences": [p.value for p in user.preferences],
+                    "resting_heart_rate": user.resting_heart_rate,
+                    "goals": user.goals,
+                    "created_at": user.created_at.isoformat(),
+                    "updated_at": user.updated_at.isoformat()
+                }
             }
             
         except Exception as e:
-            logger.error(f"Erro ao recuperar perfil {user_id}: {e}")
+            logger.error(f"Erro ao buscar perfil {user_id}: {e}")
             return {
                 "status": "error",
                 "message": f"Erro interno: {str(e)}"
             }
     
     async def update_profile(self, user_id: str, updates: Dict[str, Any]) -> Dict[str, Any]:
-        """Atualiza perfil do usuário no PostgreSQL"""
+        """Atualiza perfil do usuário"""
         
         try:
             # Verifica se usuário existe
-            existing_profile = await user_repo.get_user_by_id(user_id)
-            if not existing_profile:
+            existing_user = await user_repo.get_user_by_id(user_id)
+            if not existing_user:
                 return {
                     "status": "error",
                     "message": f"Usuário {user_id} não encontrado"
                 }
             
-            # Campos permitidos para atualização
-            allowed_fields = [
-                'weight', 'height', 'fitness_level', 'health_conditions',
-                'preferences', 'resting_heart_rate', 'goals'
-            ]
-            
-            # Filtra apenas campos permitidos
-            filtered_updates = {
-                field: value for field, value in updates.items() 
-                if field in allowed_fields
-            }
-            
-            if not filtered_updates:
-                return {
-                    "status": "error",
-                    "message": "Nenhum campo válido para atualização"
-                }
+            # Remove campos que não devem ser atualizados diretamente
+            filtered_updates = {k: v for k, v in updates.items() 
+                              if k not in ['user_id', 'created_at', 'updated_at']}
             
             # Validações específicas
-            if 'weight' in filtered_updates or 'height' in filtered_updates:
-                weight = filtered_updates.get('weight', existing_profile.weight)
-                height = filtered_updates.get('height', existing_profile.height)
-                validate_user_data(existing_profile.age, weight, height)
+            if 'age' in filtered_updates or 'weight' in filtered_updates or 'height' in filtered_updates:
+                age = filtered_updates.get('age', existing_user.age)
+                weight = filtered_updates.get('weight', existing_user.weight)
+                height = filtered_updates.get('height', existing_user.height)
+                
+                validate_user_data(age, weight, height)
             
-            # Valida enums se presentes
+            # Valida e converte enums se presentes
             if 'fitness_level' in filtered_updates:
                 try:
                     fitness_enum = FitnessLevel(filtered_updates['fitness_level'].lower())
-                    filtered_updates['fitness_level'] = fitness_enum.value
+                    filtered_updates['fitness_level'] = fitness_enum
                 except ValueError:
                     return {
                         "status": "error",
@@ -190,7 +203,9 @@ class ProfileManager:
             
             if 'health_conditions' in filtered_updates:
                 try:
-                    health_enums = [HealthCondition(cond.lower()).value for cond in filtered_updates['health_conditions']]
+                    health_enums = []
+                    for cond in filtered_updates['health_conditions']:
+                        health_enums.append(HealthCondition(cond.lower()))
                     filtered_updates['health_conditions'] = health_enums
                 except ValueError as e:
                     return {
@@ -200,7 +215,9 @@ class ProfileManager:
             
             if 'preferences' in filtered_updates:
                 try:
-                    pref_enums = [ExercisePreference(pref.lower()).value for pref in filtered_updates['preferences']]
+                    pref_enums = []
+                    for pref in filtered_updates['preferences']:
+                        pref_enums.append(ExercisePreference(pref.lower()))
                     filtered_updates['preferences'] = pref_enums
                 except ValueError as e:
                     return {
@@ -208,10 +225,10 @@ class ProfileManager:
                         "message": f"Preferência inválida: {str(e)}"
                     }
             
-            # Atualiza no banco
-            updated_profile = await user_repo.update_user(user_id, filtered_updates)
+            # Atualiza usuário
+            updated_user = await user_repo.update_user(user_id, filtered_updates)
             
-            if not updated_profile:
+            if not updated_user:
                 return {
                     "status": "error",
                     "message": "Erro ao atualizar perfil"
@@ -224,20 +241,24 @@ class ProfileManager:
                 "message": "Perfil atualizado com sucesso",
                 "updated_fields": list(filtered_updates.keys()),
                 "profile": {
-                    "user_id": updated_profile.user_id,
-                    "age": updated_profile.age,
-                    "weight": updated_profile.weight,
-                    "height": updated_profile.height,
-                    "fitness_level": updated_profile.fitness_level,
-                    "health_conditions": updated_profile.health_conditions,
-                    "preferences": updated_profile.preferences,
-                    "resting_heart_rate": updated_profile.resting_heart_rate,
-                    "goals": updated_profile.goals,
-                    "updated_at": updated_profile.updated_at.isoformat()
-                },
-                "new_completeness_score": self._calculate_completeness_from_db(updated_profile)
+                    "user_id": updated_user.user_id,
+                    "age": updated_user.age,
+                    "weight": updated_user.weight,
+                    "height": updated_user.height,
+                    "bmi": updated_user.bmi,
+                    "bmi_category": updated_user.bmi_category,
+                    "fitness_level": updated_user.fitness_level.value,
+                    "health_conditions": [hc.value for hc in updated_user.health_conditions],
+                    "preferences": [p.value for p in updated_user.preferences],
+                    "updated_at": updated_user.updated_at.isoformat()
+                }
             }
             
+        except ValidationError as e:
+            return {
+                "status": "error",
+                "message": str(e)
+            }
         except Exception as e:
             logger.error(f"Erro ao atualizar perfil {user_id}: {e}")
             return {
@@ -270,29 +291,26 @@ class ProfileManager:
                 "message": f"Erro interno: {str(e)}"
             }
     
-    async def list_profiles(self, limit: int = 50, offset: int = 0) -> Dict[str, Any]:
-        """Lista perfis de usuários"""
+    async def list_profiles(self) -> Dict[str, Any]:
+        """Lista todos os perfis"""
         
         try:
-            profiles = await user_repo.list_users(limit, offset)
+            users = await user_repo.get_all_users()
             
-            profiles_data = []
-            for profile in profiles:
-                profiles_data.append({
-                    "user_id": profile.user_id,
-                    "age": profile.age,
-                    "fitness_level": profile.fitness_level,
-                    "bmi": profile.bmi,
-                    "created_at": profile.created_at.isoformat(),
-                    "completeness": self._calculate_completeness_from_db(profile)
+            profiles = []
+            for user in users:
+                profiles.append({
+                    "user_id": user.user_id,
+                    "age": user.age,
+                    "fitness_level": user.fitness_level.value,
+                    "bmi": user.bmi,
+                    "created_at": user.created_at.isoformat()
                 })
             
             return {
                 "status": "success",
-                "profiles": profiles_data,
-                "total": len(profiles_data),
-                "limit": limit,
-                "offset": offset
+                "count": len(profiles),
+                "profiles": profiles
             }
             
         except Exception as e:
@@ -302,107 +320,68 @@ class ProfileManager:
                 "message": f"Erro interno: {str(e)}"
             }
     
-    def _calculate_completeness_from_db(self, profile) -> float:
-        """Calcula completude do perfil do banco"""
-        required_fields = 4  # age, weight, height, fitness_level
-        optional_fields = 0
+    async def validate_profile_completeness(self, user_id: str) -> Dict[str, Any]:
+        """Verifica completude do perfil e sugere melhorias"""
         
-        if profile.resting_heart_rate:
-            optional_fields += 1
-        if profile.health_conditions:
-            optional_fields += 1
-        if profile.preferences:
-            optional_fields += 1
-        if profile.goals:
-            optional_fields += 1
-        
-        total_possible = required_fields + 4  # 4 campos opcionais
-        total_filled = required_fields + optional_fields
-        
-        return round((total_filled / total_possible) * 100, 1)
-    
-    def _get_profile_suggestions_from_db(self, profile) -> List[str]:
-        """Gera sugestões baseadas no perfil do banco"""
-        suggestions = []
-        
-        if not profile.resting_heart_rate:
-            suggestions.append("Adicione FC de repouso para recomendações precisas")
-        
-        if not profile.health_conditions:
-            suggestions.append("Informe condições de saúde para exercícios seguros")
-        
-        if not profile.preferences or len(profile.preferences) < 2:
-            suggestions.append("Adicione mais preferências para variedade")
-        
-        if not profile.goals:
-            suggestions.append("Defina objetivos para acompanhar progresso")
-        
-        return suggestions
-
-def generate_health_recommendations_from_data(user_data: Dict[str, Any]) -> List[str]:
-    """Gera recomendações de saúde a partir dos dados"""
-    recommendations = []
-    
-    # Verificações por condição de saúde
-    for condition in user_data.get('health_conditions', []):
-        if condition == "diabetes":
-            recommendations.extend([
-                "Monitore glicemia antes e após exercícios",
-                "Tenha carboidratos disponíveis durante exercícios",
-                "Evite exercícios em jejum prolongado"
-            ])
-        elif condition == "hypertension":
-            recommendations.extend([
-                "Evite exercícios isométricos prolongados",
-                "Monitore pressão arterial regularmente",
-                "Hidrate-se adequadamente"
-            ])
-        elif condition == "heart_disease":
-            recommendations.extend([
-                "Necessária liberação médica para exercícios",
-                "Monitore frequência cardíaca constantemente",
-                "Evite exercícios de alta intensidade"
-            ])
-    
-    # Verificações por idade
-    age = user_data.get('age', 30)
-    if age > 65:
-        recommendations.extend([
-            "Inclua aquecimento prolongado (10-15 minutos)",
-            "Priorize exercícios de equilíbrio",
-            "Considere exercícios supervisionados"
-        ])
-    elif age < 18:
-        recommendations.extend([
-            "Foque em diversão e variedade",
-            "Evite treinamento de força muito intenso",
-            "Supervisão adulta recomendada"
-        ])
-    
-    # Verificações por IMC
-    weight = user_data.get('weight', 70)
-    height = user_data.get('height', 1.7)
-    if weight and height:
-        bmi = weight / (height ** 2)
-        if bmi > 30:
-            recommendations.extend([
-                "Inicie com exercícios de baixo impacto",
-                "Priorize atividades aquáticas se disponível",
-                "Aumente intensidade gradualmente"
-            ])
-        elif bmi < 18.5:
-            recommendations.extend([
-                "Combine exercícios com orientação nutricional",
-                "Evite exercícios muito intensos inicialmente",
-                "Foque em ganho de massa muscular"
-            ])
-    
-    # Recomendações gerais se lista vazia
-    if not recommendations:
-        recommendations = [
-            "Mantenha hidratação adequada",
-            "Faça aquecimento antes dos exercícios",
-            "Escute seu corpo e descanse quando necessário"
-        ]
-    
-    return recommendations
+        try:
+            user = await user_repo.get_user_by_id(user_id)
+            if not user:
+                return {
+                    "status": "error",
+                    "message": f"Usuário {user_id} não encontrado"
+                }
+            
+            # Calcula completude
+            required_fields = ['age', 'weight', 'height', 'fitness_level']
+            optional_fields = ['resting_heart_rate', 'health_conditions', 'preferences', 'goals']
+            
+            filled_required = sum(1 for field in required_fields 
+                                if getattr(user, field) is not None)
+            filled_optional = sum(1 for field in optional_fields 
+                                if getattr(user, field) and len(getattr(user, field)) > 0)
+            
+            total_fields = len(required_fields) + len(optional_fields)
+            completeness_score = ((filled_required * 2) + filled_optional) / (len(required_fields) * 2 + len(optional_fields)) * 100
+            
+            # Identifica campos faltando
+            missing_fields = []
+            for field in required_fields:
+                if getattr(user, field) is None:
+                    missing_fields.append(field)
+            
+            suggestions = []
+            if not user.resting_heart_rate:
+                suggestions.append("Adicione sua frequência cardíaca de repouso para recomendações mais precisas")
+            if not user.health_conditions:
+                suggestions.append("Informe condições de saúde relevantes para exercícios mais seguros")
+            if not user.preferences:
+                suggestions.append("Adicione suas preferências de exercício para recomendações personalizadas")
+            if not user.goals:
+                suggestions.append("Defina seus objetivos fitness para planos mais direcionados")
+            
+            # Determina força do perfil
+            if completeness_score >= 90:
+                profile_strength = "Excelente"
+            elif completeness_score >= 75:
+                profile_strength = "Bom"
+            elif completeness_score >= 50:
+                profile_strength = "Regular"
+            else:
+                profile_strength = "Incompleto"
+            
+            return {
+                "status": "success",
+                "user_id": user_id,
+                "completeness_score": round(completeness_score, 1),
+                "profile_strength": profile_strength,
+                "missing_required_fields": missing_fields,
+                "suggestions": suggestions,
+                "health_recommendations": generate_health_recommendations(user)
+            }
+            
+        except Exception as e:
+            logger.error(f"Erro ao validar completude do perfil {user_id}: {e}")
+            return {
+                "status": "error",
+                "message": f"Erro interno: {str(e)}"
+            }

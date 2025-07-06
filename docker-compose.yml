@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: fitness_assistant_db
+    environment:
+      POSTGRES_DB: fitness_assistant
+      POSTGRES_USER: fitness_user
+      POSTGRES_PASSWORD: fitness_dev_2024
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  app:
+    build: .
+    container_name: fitness_assistant_app
+    depends_on:
+      - postgres
+    volumes:
+      - .:/app
+    working_dir: /app
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://fitness_user:fitness_dev_2024@postgres:5432/fitness_assistant
+      - DEBUG=true
+    command: tail -f /dev/null
+
+  adminer:
+    image: adminer
+    container_name: fitness_assistant_adminer
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
