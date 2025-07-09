@@ -75,7 +75,7 @@ class DatabaseManager:
             await self._test_connection()
             
             self._initialized = True
-            logger.info("✅ Conexão com PostgreSQL estabelecida")
+            logger.info("Conexão com PostgreSQL estabelecida")
             
         except Exception as e:
             logger.error(f" Erro ao conectar PostgreSQL: {e}")
@@ -131,7 +131,7 @@ class DatabaseManager:
         try:
             async with self.engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
-            logger.info("📊 Tabelas criadas/atualizadas no PostgreSQL")
+            logger.info("Tabelas criadas/atualizadas no PostgreSQL")
         except Exception as e:
             logger.error(f" Erro ao criar tabelas: {e}")
             raise
@@ -144,17 +144,17 @@ class DatabaseManager:
         try:
             async with self.engine.begin() as conn:
                 await conn.run_sync(Base.metadata.drop_all)
-            logger.warning("🗑️ Todas as tabelas foram removidas!")
+            logger.warning("Todas as tabelas foram removidas!")
         except Exception as e:
             logger.error(f" Erro ao remover tabelas: {e}")
             raise
     
     async def reset_database(self):
         """Reseta banco (drop + create)"""
-        logger.warning("⚠️ Resetando banco de dados...")
+        logger.warning("Resetando banco de dados...")
         await self.drop_tables()
         await self.create_tables()
-        logger.info("🔄 Banco de dados resetado")
+        logger.info("Banco de dados resetado")
     
     async def get_database_info(self) -> dict:
         """Retorna informações do banco"""
@@ -229,7 +229,7 @@ async def get_db_info() -> dict:
 # Função para criar dados iniciais
 async def seed_database():
     """Cria dados iniciais no banco"""
-    logger.info("🌱 Criando dados iniciais...")
+    logger.info("Criando dados iniciais...")
     
     try:
         async with get_db_session() as session:
@@ -240,7 +240,7 @@ async def seed_database():
             exercise_count = result.scalar()
             
             if exercise_count > 0:
-                logger.info(f"ℹ️ Banco já possui {exercise_count} exercícios")
+                logger.info(f"Banco já possui {exercise_count} exercícios")
                 return
             
             # Exercícios iniciais
@@ -317,7 +317,7 @@ async def seed_database():
                 session.add(exercise)
             
             await session.commit()
-            logger.info(f"✅ {len(initial_exercises)} exercícios iniciais criados")
+            logger.info(f"{len(initial_exercises)} exercícios iniciais criados")
             
     except Exception as e:
         logger.error(f" Erro ao criar dados iniciais: {e}")

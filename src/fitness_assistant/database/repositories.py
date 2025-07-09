@@ -14,7 +14,51 @@ from .connection import get_db_session
 
 class UserRepository:
     """Repositório para usuários"""
-    
+    async def list_users(self, limit: int = 50, offset: int = 0) -> List[UserProfile]:
+        """Lista usuários com paginação"""
+        async with get_db_session() as session:
+            result = await session.execute(
+                select(UserProfile)
+                .order_by(UserProfile.created_at.desc())
+                .limit(limit)
+                .offset(offset)
+            )
+            return result.scalars().all()
+
+    async def count_users(self) -> int:
+        """Conta total de usuários"""
+        async with get_db_session() as session:
+            result = await session.execute(
+                select(func.count(UserProfile.id))
+            )
+            return result.scalar()
+
+    async def delete_user(self, user_id: str) -> bool:
+        """Deleta usuário por ID"""
+        async with get_db_session() as session:
+            result = await session.execute(
+                delete(UserProfile).where(UserProfile.user_id == user_id)
+            )
+            return result.rowcount > 0
+
+    async def update_heart_rate_data(self, user_id: str, resting_hr: int, max_hr: int = None) -> Optional[UserProfile]:
+        """Atualiza dados de frequência cardíaca"""
+        async with get_db_session() as session:
+            updates = {"resting_heart_rate": resting_hr, "updated_at": datetime.utcnow()}
+            if max_hr:
+                updates["max_heart_rate"] = max_hr
+            
+            await session.execute(
+                update(UserProfile)
+                .where(UserProfile.user_id == user_id)
+                .values(**updates)
+            )
+            
+            # Retorna usuário atualizado
+            result = await session.execute(
+                select(UserProfile).where(UserProfile.user_id == user_id)
+            )
+            return result.scalar_one_or_none()
     async def create_user(self, user_data: Dict[str, Any]) -> UserProfile:
         """Cria novo usuário"""
         async with get_db_session() as session:
