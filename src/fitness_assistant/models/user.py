@@ -6,6 +6,12 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 from enum import Enum
 
+class Gender(str, Enum):
+    """Enum para gênero"""
+    MALE = "M"
+    FEMALE = "F"
+    OTHER = "O"
+
 class FitnessLevel(str, Enum):
     BEGINNER = "beginner"
     INTERMEDIATE = "intermediate"
@@ -30,19 +36,17 @@ class ExercisePreference(str, Enum):
     RUNNING = "running"
 
 class UserProfile(BaseModel):
-    """Modelo do perfil do usuário"""
     user_id: str
-    age: int = Field(..., ge=10, le=120, description="Idade do usuário")
-    weight: float = Field(..., gt=0, le=500, description="Peso em kg")
-    height: float = Field(..., gt=0, le=3.0, description="Altura em metros")
+    age: int = Field(..., ge=13, le=120)
+    weight: float = Field(..., gt=0, le=500)
+    height: float = Field(..., gt=0, le=3.0)
     fitness_level: FitnessLevel
-    health_conditions: List[HealthCondition] = Field(default_factory=list)
-    preferences: List[ExercisePreference] = Field(default_factory=list)
+    gender: Optional[Gender] = None  # NOVO CAMPO
     resting_heart_rate: Optional[int] = Field(None, ge=30, le=120)
-    max_heart_rate: Optional[int] = Field(None, ge=120, le=220)
+    max_heart_rate: Optional[int] = Field(None, ge=100, le=220)
+    health_conditions: List[str] = Field(default_factory=list)
+    preferences: List[str] = Field(default_factory=list)
     goals: List[str] = Field(default_factory=list)
-    created_at: datetime = Field(default_factory=datetime.now)
-    updated_at: datetime = Field(default_factory=datetime.now)
     
     @validator('age')
     def validate_age(cls, v):

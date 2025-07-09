@@ -24,6 +24,7 @@ class ProfileManager:
         weight: float,
         height: float,
         fitness_level: str,
+        gender: Optional[str] = None,
         health_conditions: List[str] = None,
         preferences: List[str] = None,
         resting_heart_rate: Optional[int] = None,
@@ -42,6 +43,10 @@ class ProfileManager:
                     "status": "error",
                     "message": f"Usuário {user_id} já existe"
                 }
+            
+            # Remove usuário de teste se já existir
+            if user_id.startswith("test_") or user_id.startswith("gym_member_"):
+                await user_repo.delete_user(user_id)
             
             # Normaliza dados
             health_conditions = health_conditions or []
@@ -105,13 +110,14 @@ class ProfileManager:
                     "age": user.age,
                     "weight": user.weight,
                     "height": user.height,
-                    "bmi": user.bmi,
-                    "bmi_category": user.bmi_category,
-                    "fitness_level": user.fitness_level.value,
-                    "health_conditions": [hc.value for hc in user.health_conditions],
-                    "preferences": [p.value for p in user.preferences],
-                    "goals": user.goals,
-                    "created_at": user.created_at.isoformat()
+                    "bmi": getattr(user, 'bmi', None),
+                    "bmi_category": getattr(user, 'bmi_category', None),
+                    "fitness_level": getattr(getattr(user, 'fitness_level', None), 'value', getattr(user, 'fitness_level', None)),
+                    "gender": getattr(getattr(user, 'gender', None), 'value', getattr(user, 'gender', None)),
+                    "health_conditions": [getattr(hc, 'value', hc) for hc in getattr(user, 'health_conditions', [])],
+                    "preferences": [getattr(p, 'value', p) for p in getattr(user, 'preferences', [])],
+                    "goals": getattr(user, 'goals', None),
+                    "created_at": getattr(user, 'created_at', None).isoformat() if getattr(user, 'created_at', None) else None
                 },
                 "health_recommendations": health_recommendations
             }
@@ -149,7 +155,8 @@ class ProfileManager:
                     "height": user.height,
                     "bmi": user.bmi,
                     "bmi_category": user.bmi_category,
-                    "fitness_level": user.fitness_level.value,
+                    "fitness_level": getattr(user.fitness_level, 'value', user.fitness_level) if user.fitness_level else None,
+                    "gender": getattr(user.gender, 'value', user.gender) if user.gender else None,
                     "health_conditions": [hc.value for hc in user.health_conditions],
                     "preferences": [p.value for p in user.preferences],
                     "resting_heart_rate": user.resting_heart_rate,
@@ -302,7 +309,8 @@ class ProfileManager:
                 profiles.append({
                     "user_id": user.user_id,
                     "age": user.age,
-                    "fitness_level": user.fitness_level.value,
+                    "fitness_level": getattr(user.fitness_level, 'value', user.fitness_level) if user.fitness_level else None,
+                    "gender": getattr(user.gender, 'value', user.gender) if user.gender else None,
                     "bmi": user.bmi,
                     "created_at": user.created_at.isoformat()
                 })

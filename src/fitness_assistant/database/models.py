@@ -13,6 +13,11 @@ import enum
 
 Base = declarative_base()
 
+class GenderEnum(enum.Enum):
+    """Enum para gênero no banco"""
+    MALE = "M"
+    FEMALE = "F" 
+    OTHER = "O"
 
 class FitnessLevelEnum(str, enum.Enum):
     BEGINNER = "beginner"
@@ -49,7 +54,8 @@ class UserProfile(Base):
     age = Column(Integer, nullable=False)
     weight = Column(Float, nullable=False)
     height = Column(Float, nullable=False)
-    
+    gender = Column(SQLEnum(GenderEnum), nullable=True)
+
     # Fitness
     fitness_level = Column(SQLEnum(FitnessLevelEnum), nullable=False)
     resting_heart_rate = Column(Integer, nullable=True)
