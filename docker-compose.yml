@@ -8,25 +8,19 @@ services:
       POSTGRES_DB: fitness_assistant
       POSTGRES_USER: fitness_user
       POSTGRES_PASSWORD: fitness_dev_2024
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8"
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - fitness_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fitness_user -d fitness_assistant"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
 
-  app:
-    build: .
-    container_name: fitness_assistant_app
-    depends_on:
-      - postgres
-    volumes:
-      - .:/app
-    working_dir: /app
-    environment:
-      - DATABASE_URL=postgresql+asyncpg://fitness_user:fitness_dev_2024@postgres:5432/fitness_assistant
-      - DEBUG=true
-    command: tail -f /dev/null
-
+  # Interface administrativa (opcional)
   adminer:
     image: adminer
     container_name: fitness_assistant_adminer
@@ -37,4 +31,4 @@ services:
     restart: unless-stopped
 
 volumes:
-  postgres_data:
+  fitness_postgres_data:

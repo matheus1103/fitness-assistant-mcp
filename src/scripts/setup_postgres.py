@@ -43,7 +43,7 @@ def check_prerequisites():
         missing.append("PostgreSQL client")
     
     if missing:
-        print("❌ Pré-requisitos faltando:")
+        print(" Pré-requisitos faltando:")
         for item in missing:
             print(f"  - {item}")
         
@@ -133,7 +133,7 @@ def setup_database_environment():
     elif choice == "3":
         return configure_existing_postgres()
     else:
-        print("❌ Opção inválida")
+        print(" Opção inválida")
         return False
 
 def setup_docker_postgres():
@@ -145,7 +145,7 @@ def setup_docker_postgres():
         subprocess.run(["docker", "--version"], capture_output=True, check=True)
         print("✅ Docker encontrado")
     except (FileNotFoundError, subprocess.CalledProcessError):
-        print("❌ Docker não encontrado")
+        print(" Docker não encontrado")
         print("📦 Instale Docker: https://docs.docker.com/get-docker/")
         return False
     
@@ -263,11 +263,11 @@ $ LANGUAGE plpgsql;
             
             return True
         else:
-            print(f"❌ Erro ao iniciar Docker: {result.stderr}")
+            print(f" Erro ao iniciar Docker: {result.stderr}")
             return False
             
     except Exception as e:
-        print(f"❌ Erro com Docker: {e}")
+        print(f" Erro com Docker: {e}")
         return False
 
 def setup_local_postgres():
@@ -306,7 +306,7 @@ def configure_existing_postgres():
     database_url = input("URL completa do banco: ").strip()
     
     if not database_url:
-        print("❌ URL do banco é obrigatória")
+        print(" URL do banco é obrigatória")
         return False
     
     if test_database_connection(database_url):
@@ -346,11 +346,11 @@ def test_database_connection(database_url: str) -> bool:
             print("✅ Conexão com banco bem-sucedida")
             return True
         else:
-            print(f"❌ Erro de conexão: {result.stderr}")
+            print(f" Erro de conexão: {result.stderr}")
             return False
             
     except Exception as e:
-        print(f"❌ Erro ao testar conexão: {e}")
+        print(f" Erro ao testar conexão: {e}")
         return False
 
 def update_env_file(config: dict):
@@ -424,7 +424,7 @@ def setup_uv_project():
         return True
         
     except Exception as e:
-        print(f"❌ Erro uv sync: {e}")
+        print(f" Erro uv sync: {e}")
         return False
 
 def setup_database_migrations():
@@ -456,7 +456,7 @@ def setup_database_migrations():
         return True
         
     except Exception as e:
-        print(f"❌ Erro nas migrações: {e}")
+        print(f" Erro nas migrações: {e}")
         return False
 
 def run_database_migrations():
@@ -472,11 +472,11 @@ def run_database_migrations():
             print("✅ Migrações aplicadas")
             return True
         else:
-            print(f"❌ Erro nas migrações: {result.stderr}")
+            print(f" Erro nas migrações: {result.stderr}")
             return False
             
     except Exception as e:
-        print(f"❌ Erro executando migrações: {e}")
+        print(f" Erro executando migrações: {e}")
         return False
 
 def test_mcp_integration():
@@ -518,7 +518,7 @@ async def test_basic_functionality():
         print("🎉 Todos os testes básicos passaram!")
         
     except Exception as e:
-        print(f"❌ Erro nos testes: {e}")
+        print(f" Erro nos testes: {e}")
         sys.exit(1)
 
 if __name__ == "__main__":
@@ -536,11 +536,11 @@ if __name__ == "__main__":
             print("✅ Testes de integração passaram")
             return True
         else:
-            print(f"❌ Falha nos testes: {result.stderr}")
+            print(f" Falha nos testes: {result.stderr}")
             return False
             
     except Exception as e:
-        print(f"❌ Erro nos testes: {e}")
+        print(f" Erro nos testes: {e}")
         return False
 
 def create_claude_config():
@@ -595,7 +595,7 @@ def main():
             "uv", "run", "python", "src/fitness_assistant/server.py"
         ])
     except KeyboardInterrupt:
-        print("\\n👋 Servidor parado")
+        print("\\n Servidor parado")
 
 if __name__ == "__main__":
     main()
@@ -693,12 +693,12 @@ def main():
                 failed_steps.append(description)
                 
                 # Pergunta se quer continuar
-                continue_setup = input(f"❌ '{description}' falhou. Continuar? (y/N): ").lower()
+                continue_setup = input(f" '{description}' falhou. Continuar? (y/N): ").lower()
                 if continue_setup != 'y':
                     break
                     
         except Exception as e:
-            print(f"❌ Erro em '{description}': {e}")
+            print(f" Erro em '{description}': {e}")
             failed_steps.append(description)
             
             continue_setup = input("Continuar mesmo assim? (y/N): ").lower()

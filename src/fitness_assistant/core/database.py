@@ -435,5 +435,5 @@ def backup_database() -> bool:
         print(f"✅ Backup criado em {backup_dir}")
         return True
     except Exception as e:
-        print(f"❌ Erro ao criar backup: {e}")
+        print(f" Erro ao criar backup: {e}")
         return False

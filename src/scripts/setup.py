@@ -112,7 +112,7 @@ def install_dependencies():
             print("✅ Dependências de desenvolvimento instaladas")
             
     except subprocess.CalledProcessError as e:
-        print(f"❌ Erro ao instalar dependências: {e}")
+        print(f" Erro ao instalar dependências: {e}")
         return False
     
     return True
@@ -205,7 +205,7 @@ def run_tests():
         return True
         
     except Exception as e:
-        print(f"❌ Erro nos testes: {e}")
+        print(f" Erro nos testes: {e}")
         return False
 
 def setup_git():
@@ -301,7 +301,7 @@ def main():
             if success is False:
                 failed_steps.append(description)
         except Exception as e:
-            print(f"❌ Erro em '{description}': {e}")
+            print(f" Erro em '{description}': {e}")
             failed_steps.append(description)
     
     print("\n" + "="*50)
@@ -433,7 +433,7 @@ def main():
         print("💡 Agora você pode testar o assistente com dados reais")
         
     except Exception as e:
-        print(f"❌ Erro ao popular dados: {e}")
+        print(f" Erro ao popular dados: {e}")
 
 if __name__ == "__main__":
     main()

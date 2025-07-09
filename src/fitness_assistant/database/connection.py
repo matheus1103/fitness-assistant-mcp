@@ -78,8 +78,8 @@ class DatabaseManager:
             logger.info("✅ Conexão com PostgreSQL estabelecida")
             
         except Exception as e:
-            logger.error(f"❌ Erro ao conectar PostgreSQL: {e}")
-            logger.error("💡 Certifique-se de que:")
+            logger.error(f" Erro ao conectar PostgreSQL: {e}")
+            logger.error("Certifique-se de que:")
             logger.error("   - PostgreSQL está rodando")
             logger.error("   - DATABASE_URL está correta")
             logger.error("   - Usuario/senha estão corretos")
@@ -93,7 +93,7 @@ class DatabaseManager:
                 version = result.scalar()
                 logger.info(f"🔗 Conectado ao PostgreSQL: {version}")
         except Exception as e:
-            logger.error(f"❌ Erro no teste de conexão: {e}")
+            logger.error(f" Erro no teste de conexão: {e}")
             raise
     
     async def close(self):
@@ -118,7 +118,7 @@ class DatabaseManager:
                 await session.commit()
             except Exception as e:
                 await session.rollback()
-                logger.error(f"❌ Erro na sessão de banco: {e}")
+                logger.error(f" Erro na sessão de banco: {e}")
                 raise
             finally:
                 await session.close()
@@ -133,7 +133,7 @@ class DatabaseManager:
                 await conn.run_sync(Base.metadata.create_all)
             logger.info("📊 Tabelas criadas/atualizadas no PostgreSQL")
         except Exception as e:
-            logger.error(f"❌ Erro ao criar tabelas: {e}")
+            logger.error(f" Erro ao criar tabelas: {e}")
             raise
     
     async def drop_tables(self):
@@ -146,7 +146,7 @@ class DatabaseManager:
                 await conn.run_sync(Base.metadata.drop_all)
             logger.warning("🗑️ Todas as tabelas foram removidas!")
         except Exception as e:
-            logger.error(f"❌ Erro ao remover tabelas: {e}")
+            logger.error(f" Erro ao remover tabelas: {e}")
             raise
     
     async def reset_database(self):
@@ -189,7 +189,7 @@ class DatabaseManager:
                     "initialized": self._initialized
                 }
         except Exception as e:
-            logger.error(f"❌ Erro ao obter informações do banco: {e}")
+            logger.error(f" Erro ao obter informações do banco: {e}")
             return {"error": str(e)}
 
 
@@ -320,5 +320,5 @@ async def seed_database():
             logger.info(f"✅ {len(initial_exercises)} exercícios iniciais criados")
             
     except Exception as e:
-        logger.error(f"❌ Erro ao criar dados iniciais: {e}")
+        logger.error(f" Erro ao criar dados iniciais: {e}")
         raise

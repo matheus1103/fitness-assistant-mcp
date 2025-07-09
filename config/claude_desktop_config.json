@@ -1,0 +1,14 @@
+{
+  "mcp_servers": {
+    "fitness-assistant": {
+      "command": "python",
+      "args": [
+        "C:\\\\\\\\Users\\\\\\\\mathe\\\\\\\\Projetos\\\\\\\\ia2\\\\\\\\final\\\\\\\\fitness-assistant-mcp\\\\src\\\\fitness_assistant\\\\server.py"
+      ],
+      "env": {
+        "PYTHONPATH": "C:\\\\Users\\\\mathe\\\\Projetos\\\\ia2\\\\final\\\\fitness-assistant-mcp",
+        "DATABASE_URL": "postgresql+asyncpg://fitness_user:fitness_dev_2024@localhost:5432/fitness_assistant"
+      }
+    }
+  }
+}

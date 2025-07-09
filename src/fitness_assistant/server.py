@@ -208,12 +208,12 @@ async def main():
     
     try:
         # Inicializa banco de dados
-        print("📊 Inicializando banco de dados...")
+        print("Inicializando banco de dados...")
         await init_database()
-        print("✅ Banco inicializado")
+        print("Banco inicializado")
         
-        print("🚀 Iniciando Fitness Assistant MCP Server...")
-        print("💡 Aguardando conexões do Claude...")
+        print("Iniciando Fitness Assistant MCP Server...")
+        print("Aguardando conexões do Claude...")
         
         # Inicia servidor MCP
         async with stdio_server() as (read_stream, write_stream):
@@ -225,7 +225,7 @@ async def main():
             
     except Exception as e:
         logger.error(f"Erro no servidor: {e}")
-        print(f"❌ Erro no servidor: {e}")
+        print(f"Erro no servidor: {e}")
         raise
 
 if __name__ == "__main__":
@@ -235,7 +235,7 @@ if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("\n👋 Servidor interrompido pelo usuário")
+        print("\n Servidor interrompido pelo usuário")
     except Exception as e:
-        print(f"❌ Erro fatal: {e}")
+        print(f" Erro fatal: {e}")
         exit(1)
