@@ -8,9 +8,9 @@ from enum import Enum
 
 class Gender(str, Enum):
     """Enum para gênero"""
-    MALE = "M"
-    FEMALE = "F"
-    OTHER = "O"
+    MALE = "MALE"      # MUDANÇA: de "M" para "MALE"
+    FEMALE = "FEMALE"  # MUDANÇA: de "F" para "FEMALE"
+    OTHER = "OTHER"    # MUDANÇA: de "O" para "OTHER"
 
 class FitnessLevel(str, Enum):
     BEGINNER = "beginner"

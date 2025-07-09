@@ -14,7 +14,16 @@ from ..connection import get_db_session
 
 class UserRepository(BaseRepository[UserProfile]):
     """Repository para operações de usuário"""
-    
+    async def list_users(self, limit: int = 100, offset: int = 0) -> List[UserProfile]:
+        """Lista usuários com paginação"""
+        async with get_db_session() as session:
+            result = await session.execute(
+                select(UserProfile)
+                .order_by(UserProfile.created_at.desc())
+                .limit(limit)
+                .offset(offset)
+            )
+            return result.scalars().all()
     def __init__(self):
         super().__init__(UserProfile)
     
