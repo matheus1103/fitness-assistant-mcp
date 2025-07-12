@@ -1,6 +1,8 @@
 # 🏋️ Assistente de Treino Físico com MCP
 
-Um assistente inteligente para recomendações personalizadas de exercícios usando Large Language Models e Model Context Protocol.
+O avanço das tecnologias de inteligência artificial tem permitido o surgimento de soluções inovadoras em diversas áreas, incluindo saúde e atividade física. O uso de LLMs (Large Language Models) abre novas possibilidades para a criação de assistentes inteligentes capazes de compreender e adaptar-se ao contexto do usuário em tempo real.
+
+Neste trabalho, propomos o desenvolvimento de uma assistente de treino físico que, utilizando dados como batimentos cardíacos e preferências pessoais, seja capaz de recomendar os melhores exercícios de forma dinâmica e personalizada. O diferencial da proposta está na integração com o Model Context Protocol, que permite o refinamento contínuo das respostas da LLM com base em dados contextuais atualizados. Essa abordagem visa tornar a prática de atividades físicas mais segura e eficiente, contribuindo para uma melhor adesão e resultados por parte dos usuários.
 
 ## 📋 Funcionalidades
 
@@ -12,29 +14,48 @@ Um assistente inteligente para recomendações personalizadas de exercícios usa
 - **Analytics**: Estatísticas de progresso e insights personalizados
 
 ### Integração MCP
-- Compatible com Claude Desktop via Model Context Protocol
+- Compatível com Claude Desktop via Model Context Protocol
 - Tools disponíveis como ferramentas nativas do assistente
 - Contexto dinâmico baseado em dados biométricos em tempo real
+- Refinamento contínuo das recomendações com base em dados contextuais
 
 ## 🚀 Instalação
 
 ### Pré-requisitos
+- Python 3.9 ou superior
+- PostgreSQL (opcional, usa banco em memória por padrão)
+
+### Instalação Automática
 ```bash
-pip install fastmcp pydantic numpy
+# Clone o repositório
+git clone https://github.com/matheus1103/fitness-assistant-mcp
+cd fitness-assistant-mcp
+
+# Execute o script de setup
+python src/scripts/setup.py
 ```
 
-### Configuração Básica
-1. Salve o código principal como `fitness_assistant.py`
-2. Execute localmente para testes:
+### Instalação Manual
 ```bash
-python fitness_assistant.py
+# Instale as dependências
+pip install -r requirements.txt
+
+# Configure o ambiente
+cp .env.example .env
+# Edite o arquivo .env conforme necessário
+
+# Execute as migrações (se usando PostgreSQL)
+alembic upgrade head
 ```
+
+## 🔧 Configuração
 
 ### Integração com Claude Desktop
 
 1. **Localize o arquivo de configuração**:
-   - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
-   - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+   - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+   - **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+   - **Linux**: `~/.config/claude/claude_desktop_config.json`
 
 2. **Adicione a configuração MCP**:
 ```json
@@ -42,8 +63,10 @@ python fitness_assistant.py
   "mcp_servers": {
     "fitness-assistant": {
       "command": "python",
-      "args": ["/caminho/para/seu/fitness_assistant.py"],
-      "env": {}
+      "args": ["/caminho/para/seu/projeto/src/fitness_assistant/main.py"],
+      "env": {
+        "PYTHONPATH": "/caminho/para/seu/projeto"
+      }
     }
   }
 }
@@ -51,149 +74,129 @@ python fitness_assistant.py
 
 3. **Reinicie o Claude Desktop**
 
+### Configuração de Banco de Dados
+
+#### SQLite (Padrão)
+```env
+DATABASE_TYPE=memory
+# ou
+DATABASE_TYPE=sqlite
+DATABASE_URL=sqlite:///./data/fitness.db
+```
+
+#### PostgreSQL
+```env
+DATABASE_TYPE=postgresql
+DATABASE_URL=postgresql://user:password@localhost/fitness_db
+```
+
 ## 💡 Como Usar
 
 ### 1. Criação de Perfil
-```python
-# Via MCP no Claude
-"Crie um perfil para usuário joão123: 28 anos, 75kg, 1.75m, nível intermediário, sem condições de saúde, prefere cardio e musculação"
+```
+Crie um perfil para usuário joão123: 28 anos, 75kg, 1.75m, nível intermediário, sem condições de saúde, prefere cardio e musculação
 ```
 
 ### 2. Cálculo de Zonas de FC
-```python
-# Calcula zonas baseadas na idade e FC de repouso
-"Calcule as zonas de frequência cardíaca para idade 28 anos e FC repouso 65 bpm"
+```
+Calcule as zonas de frequência cardíaca para idade 28 anos e FC repouso 65 bpm
 ```
 
 ### 3. Recomendações de Exercício
-```python
-# Baseado na FC atual e perfil
-"Minha FC atual é 140 bpm, recomende exercícios para uma sessão de 45 minutos"
+```
+Minha FC atual é 140 bpm, recomende exercícios para uma sessão de 45 minutos
 ```
 
 ### 4. Registro de Treino
-```python
-# Após completar exercícios
-"Registre minha sessão: corrida 25min + musculação 12min, duração total 45min, FC média 142, esforço percebido 6/10"
+```
+Registre minha sessão: corrida 25min + musculação 12min, duração total 45min, FC média 142, esforço percebido 6/10
 ```
 
 ### 5. Análise de Progresso
-```python
-# Analytics dos últimos 30 dias
-"Mostre minha análise de progresso dos últimos 30 dias"
+```
+Mostre meu progresso nos últimos 30 dias e dê insights sobre minha evolução
 ```
 
-## 🔧 Arquitetura
+## 🛠️ Desenvolvimento
 
-### Componentes Principais
-
+### Estrutura do Projeto
 ```
-fitness_assistant.py
-├── FastMCP Server
-├── Pydantic Models
-│   ├── UserProfile
-│   ├── HeartRateData
-│   └── ExerciseRecommendation
-├── MCP Tools
-│   ├── create_user_profile()
-│   ├── calculate_heart_rate_zones()
-│   ├── recommend_exercise()
-│   ├── log_workout_session()
-│   └── get_workout_analytics()
-└── Helper Functions
-    ├── determine_current_zone()
-    ├── generate_safety_notes()
-    └── estimate_calories()
+src/
+├── fitness_assistant/
+│   ├── main.py              # Servidor MCP principal
+│   ├── tools/               # Ferramentas MCP
+│   ├── models/              # Modelos de dados
+│   ├── database/            # Camada de persistência
+│   └── core/                # Lógica de negócio
+├── scripts/                 # Scripts de setup e manutenção
+└── tests/                   # Testes automatizados
 ```
 
-### Fluxo de Dados
+### Executando Testes
+```bash
+# Testes unitários
+python -m pytest tests/
+
+# Testes com cobertura
+python -m pytest tests/ --cov=fitness_assistant --cov-report=html
+
+# Testes de integração
+python -m pytest tests/integration/
 ```
-Dados Biométricos → Análise de Contexto → LLM → Recomendações → Feedback Loop
-```
 
-## 📊 Zonas de Frequência Cardíaca
+## Arquitetura
 
-| Zona | Nome | % FC Máx | Benefícios |
-|------|------|----------|------------|
-| 1 | Recuperação Ativa | 50-60% | Recuperação, queima gordura |
-| 2 | Aeróbica Base | 60-70% | Resistência cardiovascular |
-| 3 | Tempo/Ritmo | 70-80% | Eficiência aeróbica |
-| 4 | Limiar Anaeróbico | 80-90% | Capacidade anaeróbica |
-| 5 | VO2 Max | 90-100% | Potência máxima |
+### Model Context Protocol (MCP)
+O sistema utiliza o MCP para:
+- **Contextualização Dinâmica**: Atualização contínua do contexto baseado em dados biométricos
+- **Personalização Adaptativa**: Refinamento das recomendações com base no histórico do usuário
+- **Integração Seamless**: Funcionamento nativo dentro do Claude Desktop
 
-## 🛡️ Recursos de Segurança
+### Algoritmos de Recomendação
+- **Análise de Zona FC**: Classificação automática da intensidade do exercício
+- **Filtragem Colaborativa**: Recomendações baseadas em usuários similares
+- **Adaptação Temporal**: Ajuste das recomendações com base no horário e frequência de treino
+- **Prevenção de Lesões**: Monitoramento de carga de treino e sinais de fadiga
 
-### Monitoramento Automático
-- Alertas para FC muito alta (>180 bpm)
-- Adaptações para condições de saúde específicas
-- Recomendações idade-específicas
+### Segurança e Privacidade
+- Dados biométricos criptografados
+- Processamento local quando possível
+- Conformidade com LGPD/GDPR
+- Consentimento informado para coleta de dados
 
-### Condições Suportadas
-- Diabetes: Lembretes sobre glicemia
-- Hipertensão: Evita exercícios isométricos prolongados
-- 65+ anos: Aquecimento extra e alongamento
+## Métricas e Analytics
 
-## 📈 Analytics e Progresso
+### Indicadores Principais
+- **Aderência**: Percentual de sessões completadas vs. planejadas
+- **Progresso**: Evolução de métricas como FC de repouso e capacidade aeróbica
+- **Segurança**: Incidência de alertas de FC alta e feedbacks de dor/desconforto
+- **Satisfação**: Avaliação do usuário sobre as recomendações
 
-### Métricas Calculadas
-- Sessões por semana
-- Duração média por sessão
-- FC média durante exercícios
-- Estimativa de calorias queimadas
-- Notas de progresso automatizadas
+### Dashboards Disponíveis
+- Progresso semanal/mensal
+- Distribuição de tipos de exercício
+- Análise de zonas de FC
+- Tendências de performance
 
-### Insights Automáticos
-- Detecção de melhoria cardiovascular
-- Análise de consistência nos treinos
-- Recomendações de ajuste de intensidade
+## Trabalhos futuros
 
-## 🎯 Casos de Uso
+- **Algoritmos de recomendação mais sofisticados**
+- **Integração com mais dispositivos**
+- **Interface de usuário**
+- **Validação médica das recomendações**
 
-### Para Iniciantes
-- Exercícios seguros e progressivos
-- Monitoramento de intensidade
-- Educação sobre zonas de FC
-
-### Para Intermediários/Avançados
-- Otimização de treinos baseada em dados
-- Análise de performance detalhada
-- Recomendações de periodização
-
-### Para Profissionais
-- Ferramenta de apoio para personal trainers
-- Base para desenvolvimento de apps fitness
-- Integração com dispositivos IoT
-
-## 🔄 Próximos Passos
-
-### Expansões Planejadas
-- [ ] Integração com wearables (Apple Watch, Garmin)
-- [ ] Machine Learning para predições
-- [ ] Planos de treino de longo prazo
-- [ ] Integração com APIs de nutrição
-- [ ] Dashboard web interativo
-- [ ] Notificações push
-- [ ] Compartilhamento social
-
-### Melhorias Técnicas
-- [ ] Persistência em banco de dados
-- [ ] API REST complementar
-- [ ] Testes automatizados
-- [ ] Deploy em cloud
-- [ ] Monitoramento e logs
-
-## 🤝 Contribuindo
-
-Contribuições são bem-vindas! Áreas prioritárias:
-- Algoritmos de recomendação mais sofisticados
-- Integração com mais dispositivos
-- Interface de usuário
-- Validação médica das recomendações
-
-## ⚠️ Disclaimer
+## Disclaimer
 
 Este assistente é para fins educacionais e informativos. Sempre consulte profissionais de saúde antes de iniciar novos programas de exercício, especialmente se tiver condições médicas pré-existentes.
 
+## Licença
+
+Este projeto está licenciado sob a MIT License - veja o arquivo [LICENSE](LICENSE) para detalhes.
+
+## Autor
+
+- **Matheus Francisco** - *Desenvolvimento inicial* - [matheus1103](https://github.com/matheus1103)
+
 ---
 
-**Desenvolvido com ❤️ usando FastMCP e Claude**
+**Desenvolvido usando FastMCP e Claude**
